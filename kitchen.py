@@ -6,7 +6,6 @@ host = 'localhost'
 port = 23400
 
 id = "Kitchen"
-pedidoId = 1
 
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 receive_flag = True
@@ -39,7 +38,7 @@ def ressend_order(orderId):
     timer.start()
 
 def order_ready(table, orderId):
-    if table not in order:
+    if table not in orders:
         print("Não há pedidos para essa mesa")
         return
     for order in orders[table]:
@@ -52,18 +51,16 @@ def order_ready(table, orderId):
                 timer = threading.Timer(time_time, ressend_order, args=(orderId))
                 pending_order[orderId] = {'Time': timer, 'Message': msg}
                 timer.start()
-        print(f'Pedido {order} está pronto!')
+            print(f'Pedido {order} está pronto!')
     
 def handle_order(msg):
-    global pedidoId
     table = msg['Table']
     order = json.loads(msg['Order'][0])
     orderVector = json.dumps({
         'Item': order['Item'],
         'Amount': order['Amount'],
-        'Id': pedidoId
+        'Id': msg['Id']
     })
-    pedidoId += 1
     if table not in orders:
         orders[table] = []
     orders[table].append(orderVector)
@@ -82,6 +79,14 @@ def handle_delivery(msg):
             break
     for key in pending_order:
         pending_order[key]['Time'].cancel()
+    
+    finishOrder = json.dumps({
+        'Table': table,
+        'Id': orderId,
+        'From': msg['From'],
+        'Tipe': 'Finish'
+    })
+    client_socket.send(finishOrder.encode())
     print(f'Pedido {orderId} para mesa {table} foi entregue!')
 
 def receive_message(socket):
@@ -102,9 +107,8 @@ def receive_message(socket):
         except:
             break
 
-if __name__ == "__main__":
+def options_list():
     option = None
-    start_client()
     while option != 0:
         print("O que deseja:")
         print("1 - Pedido Pronto")
@@ -127,3 +131,7 @@ if __name__ == "__main__":
                 print("Comando não aceito")
         except ValueError:
             print("Por favor, insira um número válido.")
+
+if __name__ == "__main__":
+    start_client()
+    options_list()

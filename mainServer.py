@@ -5,15 +5,20 @@ import json
 host = 'localhost'
 port = 23400
 
+amount_clients = 10
 clients = {}
 
+orderId = 1
+
 def handle_order(msg):
+    global orderId
     table = msg['Table']
     orders = msg['Order']
     if 'Kitchen' in orders:
         kitchen_order = json.dumps({
             "Table": table,
             "Order": orders['Kitchen'],
+            "Id": orderId,
             "Tipe": "Order"
         })
         clients["Kitchen"].send(kitchen_order.encode())
@@ -22,9 +27,12 @@ def handle_order(msg):
         bar_order = json.dumps({
             "Table": table,
             "Order": orders['Bar'],
+            "Id": orderId,
             "Tipe": "Order"
         })
         clients["Bar"].send(bar_order.encode())
+    orderId += 1
+    print(f'Pedido {orders} realizado!')
 
 def handle_ready(msg):
     for id in clients:
@@ -36,6 +44,7 @@ def handle_ready(msg):
                 "From": msg['From']
             })
             clients[id].send(sendMsg.encode())
+            print(f'Pedido {msg['Order']} pronto!')
 
 def handle_delivery(msg):
     table = msg['Table']
@@ -45,21 +54,30 @@ def handle_delivery(msg):
     order = json.dumps({
         'Table': table,
         'Id': orderId,
+        'From': fromId,
         'Tipe': "Delivery"
     })
     match(fromId):
         case 'Kitchen':
-            print("Send to kitchen")
             clients["Kitchen"].send(order.encode())
         case 'Bar':
-            print("Send to Bar")
             clients["Bar"].send(order.encode())
         case _:
             print("Erro no delivery!")
-    print("Delivery")
+    print(f'Pedido {order} entregue!')
+
+def handle_finish(msg):
+    order = json.dumps(msg)
+    for id in clients:
+        if id != 'Kitchen' and id != 'Bar':
+            clients[id].send(order.encode())
+            print(f'Pedido {order} finalizado!')
 
 def handle_client(conn, addr):
     id = conn.recv(1024).decode()
+    if id in clients:
+        print(f'Já há conexão com o id: {id}')
+        return
     clients[id] = conn
     print(f"{id} conectado de {addr}")
     try:
@@ -69,8 +87,9 @@ def handle_client(conn, addr):
                     print(f"[-] Cliente {addr} desconectado.")
                     break
                 msg = json.loads(data.decode())
-                print(msg)
                 match msg['Tipe']:
+                    case 'Finish':
+                        handle_finish(msg)
                     case 'Order':
                         handle_order(msg)
                     case 'Ready':
@@ -88,11 +107,17 @@ def handle_client(conn, addr):
         conn.close() 
     except Exception as e:
         print(f"Erro com {addr}: {e}")
+    finally:
+        if id in clients:
+            print(f"{id} foi desconetado!")
+            del clients[id]
+        conn.close()
 
 def start_server():
+    global amount_clients
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.bind((host, port))
-    server_socket.listen(5)
+    server_socket.listen(amount_clients)
     print("Servidor aguardando conexões...")
     try:
         while True:

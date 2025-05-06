@@ -42,6 +42,7 @@ def add_item(item, amount, tipe):
 def send_order(table):
     msg = json.dumps({"Table": table, "Order": orders, "Tipe": "Order"})
     client_socket.send(msg.encode())
+    new_client()
 
 def handle_ready(msg):
     global ready
@@ -78,6 +79,20 @@ def delivery_order(table, orderId):
                 client_socket.send(delivery.encode())
         print("Delivery")
 
+def handle_finish(msg):
+    global ready
+    table = msg['Table']
+    orderId = msg['Id']
+    fromId = msg['From']
+    if table not in ready:
+        print("Pedido Inválido")
+        return
+    for item in ready[table]:
+        if int(orderId) == item['Id'] and item['From'] == fromId:
+            ready[table].remove(item)
+            print(f'Pedido {orderId} entregue!')
+            break
+
 def receive_message(socket):
     while receive_flag:
         try:
@@ -85,6 +100,8 @@ def receive_message(socket):
             if data:
                 msg = json.loads(data.decode())
                 match (msg['Tipe']):
+                    case 'Finish':
+                        handle_finish(msg)
                     case 'Ready':
                         handle_ready(msg)
                     case 'EndServer':
@@ -94,15 +111,16 @@ def receive_message(socket):
         except:
             break
 
-if __name__ == "__main__":
+def options_list():
+    global ready
     option = None
-    start_client()
     while option != 0:
         print("O que deseja:")
         print("1 - Adicionar Item.")
         print("2 - Fazer Pedido.")
         print("3 - Novo Atendimento.")
         print("4 - Entregar Pedido")
+        print("5 - Pedidos Prontos")
         print("0 - Sair")
         
         try:
@@ -126,6 +144,8 @@ if __name__ == "__main__":
                 table = input("Mesa: ")
                 orderId = input("Pedido: ")
                 delivery_order(table, orderId)
+            elif option == 5:
+                print(ready)
             elif option == 0:
                 end_client()
                 print("Saindo...")
@@ -134,3 +154,7 @@ if __name__ == "__main__":
                 print("Comando não aceito")
         except ValueError:
             print("Por favor, insira um número válido.")
+
+if __name__ == "__main__":
+    start_client()
+    options_list()
